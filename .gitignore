@@ -1,3 +1,9 @@
+# Cosas privadas que nunca deberían ver la luz del día
+private/*
+*/private/*
+*/bin/*
+# VIM
+*.swp
 # Binaries for programs and plugins
 *.exe
 *.exe~
