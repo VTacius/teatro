@@ -6,9 +6,17 @@ import (
 )
 
 // RevisarIntervalo : ¿Las fechas tiene un intervalo mayor al requerido en segundos?
-func RevisarIntervalo(intervalo float64, hoy time.Time, fecha time.Time) bool {
+func RevisarIntervalo(intervalo float64, hoy time.Time, fecha time.Time) uint8 {
 	lapso := hoy.Sub(fecha)
-	return lapso.Seconds() >= intervalo
+	if lapso < 0 {
+		lapso *= -1
+	}
+
+	if lapso.Seconds() >= intervalo {
+		return 1
+	}
+
+	return 0
 }
 
 func obtieneElemento(cadena string, inicio int, final int) int {

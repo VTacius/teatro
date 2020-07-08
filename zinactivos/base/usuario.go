@@ -1,6 +1,7 @@
 package base
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/go-ldap/ldap/v3"
@@ -9,6 +10,7 @@ import (
 
 // Usuario Contiene la definición actual de usuario
 type Usuario struct {
+	DN                       string
 	Username                 string
 	Nombre                   string
 	ZimbraLastLogonTimestamp time.Time
@@ -50,5 +52,19 @@ func (a *AccesoUsuario) ListarUsuarios(filtro string, atributos []string, fn tra
 	}
 
 	a.Datos = fn(respuesta)
+
+}
+
+// ModificarUsuario Modificamos UN usuario
+func (a *AccesoUsuario) ModificarUsuario(dn string, modificacion []utils.Reemplazo) {
+	conexion, err := utils.Conectar(a.url, a.username, a.password)
+	if err != nil {
+		utils.Salida("Error en la conexión", err)
+	}
+
+	err = utils.ModificarReemplazo(conexion, dn, modificacion)
+	if err != nil {
+		utils.Salida(fmt.Sprintf("Error modificando %s", dn), err)
+	}
 
 }
