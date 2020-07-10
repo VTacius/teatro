@@ -89,8 +89,8 @@ var mensaje string = `
 `
 
 type datos struct {
-	Bloqueados []base.Usuario
-	Proximos   []base.Usuario
+	Bloqueados []base.Objeto
+	Proximos   []base.Objeto
 }
 
 func contenido(subject string, data datos) (string, error) {
@@ -104,7 +104,6 @@ func contenido(subject string, data datos) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	err = template.Execute(&salida, data)
 	if err != nil {
 		return "", err
@@ -114,7 +113,7 @@ func contenido(subject string, data datos) (string, error) {
 
 }
 
-func crearEntradas(respuesta *ldap.SearchResult) (resultado []base.Usuario) {
+func crearEntradas(respuesta *ldap.SearchResult) (resultado []base.Objeto) {
 	for _, item := range respuesta.Entries {
 		DN := item.DN
 		ZimbraLastLogonTimestamp := utils.Fechador(item.GetAttributeValue("zimbraLastLogonTimestamp"))
@@ -122,7 +121,7 @@ func crearEntradas(respuesta *ldap.SearchResult) (resultado []base.Usuario) {
 		Nombre := strings.TrimSpace(item.GetAttributeValue("cn"))
 		Description := strings.TrimSpace(item.GetAttributeValue("description"))
 		resultado = append(resultado,
-			base.Usuario{DN: DN,
+			base.Objeto{DN: DN,
 				Username:                 Username,
 				Nombre:                   Nombre,
 				ZimbraLastLogonTimestamp: ZimbraLastLogonTimestamp,
@@ -142,7 +141,7 @@ func proximoBorrado(hoy time.Time, fecha time.Time) (resultado bool) {
 	return utils.RevisarIntervalo(7344000, hoy, fecha) == 1
 }
 
-func clasificarEntradas(entradas []base.Usuario) (bloqueadosHoy []base.Usuario, proximosABorrar []base.Usuario) {
+func clasificarEntradas(entradas []base.Objeto) (bloqueadosHoy []base.Objeto, proximosABorrar []base.Objeto) {
 	hoy := time.Now()
 	for _, item := range entradas {
 		timestamp := strings.SplitN(item.Description, ":", 2)[1]
@@ -161,8 +160,13 @@ func clasificarEntradas(entradas []base.Usuario) (bloqueadosHoy []base.Usuario, 
 
 func reporte() {
 
+	dnBase := "ou=people,dc=salud,dc=gob,dc=sv"
 	usuario, contrasenia, url := utils.ConfiguracionAccesoLdap()
-	acceso := base.NewAccesoUsuario(url, usuario, contrasenia)
+	conexion, err := utils.Conectar(url, usuario, contrasenia)
+	if err != nil {
+		utils.Salida("Error al conectarse", err)
+	}
+	acceso := base.ObjetoAcceso{Cliente: conexion, Base: dnBase}
 
 	filtro := "(&(zimbraLastLogonTimestamp=*)(description=ENCOLABORRADO*))"
 	atributos := []string{"cn", "uid", "zimbraLastLogonTimestamp", "description"}
@@ -172,20 +176,20 @@ func reporte() {
 	// Si no hay datos que mostrar, pues que no se envia nada
 
 	if len(bloqueados) == 0 && len(proximos) == 0 {
+		fmt.Println("No envia reporte porque no hay nada que enviar")
 		os.Exit(0)
 	}
 
 	// Empiezo con el envío de correo
 	usuarioCorreo, passwordCorreo, servidorCorreo := utils.ConfiguracionEnvioCorreo()
 	subject := "Subject: Reporte de usuarios inactivos\n"
-	rcpt := "To: <ursi_@salud.gob.sv>\n"
+	rcpt := "To: <alortiz@salud.gob.sv>\n"
 
 	data := datos{Bloqueados: bloqueados, Proximos: proximos}
 
 	mensaje, err := contenido(subject, data)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		utils.Salida("Error crear cuerpo del correo", err)
 	}
 
 	mime := "MIME-version: 1.0;\nContent-Type: text/html; charset=\"UTF-8\";\n\n"
@@ -195,7 +199,6 @@ func reporte() {
 
 	err = smtp.SendMail(servidorCorreo+":587", auth, usuarioCorreo, []string{"alortiz@salud.gob.sv"}, msg)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		utils.Salida("Error al enviar correo", err)
 	}
 }

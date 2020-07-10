@@ -1,4 +1,5 @@
 # Cosas privadas que nunca deberían ver la luz del día
+.vscode
 private/*
 */private/*
 */bin/*

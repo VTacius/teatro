@@ -24,34 +24,29 @@ func init() {
 	rootCmd.AddCommand(listarCmd)
 }
 
-func filtrarInactivos(respuesta *ldap.SearchResult) (resultado []base.Usuario) {
+func filtrarInactivosObjetos(respuesta *ldap.SearchResult) (resultado []base.Objeto) {
 	hoy := time.Now()
-
 	for _, item := range respuesta.Entries {
+		DN := item.DN
 		ZimbraLastLogonTimestamp := utils.Fechador(item.GetAttributeValue("zimbraLastLogonTimestamp"))
-
 		if utils.RevisarIntervalo(15552000.0, hoy, ZimbraLastLogonTimestamp) == 1 {
-
-			DN := item.DN
 			Username := strings.TrimSpace(item.GetAttributeValue("uid"))
 			Nombre := strings.TrimSpace(item.GetAttributeValue("cn"))
 			Description := strings.TrimSpace(item.GetAttributeValue("description"))
-
 			resultado = append(resultado,
-				base.Usuario{DN: DN,
+				base.Objeto{
+					DN:                       DN,
 					Username:                 Username,
 					Nombre:                   Nombre,
 					ZimbraLastLogonTimestamp: ZimbraLastLogonTimestamp,
 					Description:              Description})
-
 		}
-
 	}
 
 	return
 }
 
-func encontrarLongitud(entradas []base.Usuario) (resultUsername int, resultNombre int) {
+func encontrarLongitud(entradas []base.Objeto) (resultUsername int, resultNombre int) {
 	for _, item := range entradas {
 		longUsername := len(item.Username)
 		longNombre := len(item.Nombre)
@@ -64,25 +59,29 @@ func encontrarLongitud(entradas []base.Usuario) (resultUsername int, resultNombr
 			resultNombre = longNombre
 		}
 	}
-
 	return
 }
 
 func listar() {
 
+	dnBase := "ou=people,dc=salud,dc=gob,dc=sv"
 	usuario, contrasenia, url := utils.ConfiguracionAccesoLdap()
-	acceso := base.NewAccesoUsuario(url, usuario, contrasenia)
+	conexion, err := utils.Conectar(url, usuario, contrasenia)
+	if err != nil {
+		utils.Salida("Error al conectarse", err)
+	}
+	acceso := base.ObjetoAcceso{Cliente: conexion, Base: dnBase}
 
 	filtro := "(zimbraLastLogonTimestamp=*)"
 	atributos := []string{"cn", "uid", "zimbraLastLogonTimestamp", "description"}
-	acceso.ListarUsuarios(filtro, atributos, filtrarInactivos)
+	err = acceso.ListarUsuarios(filtro, atributos, filtrarInactivosObjetos)
+	if err != nil {
+		utils.Salida("Error al ejecutar búsqueda", err)
+	}
 
 	longitudUsername, longitudNombre := encontrarLongitud(acceso.Datos)
+
 	for _, usuario := range acceso.Datos {
-		fecha := fmt.Sprintf("%02d/%02d/%d",
-			usuario.ZimbraLastLogonTimestamp.Day(),
-			usuario.ZimbraLastLogonTimestamp.Month(),
-			usuario.ZimbraLastLogonTimestamp.Year())
-		fmt.Printf("| %-*s | %-*s | %s | %-20s\n", longitudUsername, usuario.Username, longitudNombre, usuario.Nombre, fecha, usuario.Description)
+		fmt.Printf("| %-*s | %-*s | %s | %-20s\n", longitudUsername, usuario.Username, longitudNombre, usuario.Nombre, usuario.ZimbraLastLogonTimestamp, usuario.Description)
 	}
 }

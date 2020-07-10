@@ -22,9 +22,15 @@ func init() {
 	rootCmd.AddCommand(bloquearCmd)
 }
 
-func bloquearUsuario(fecha time.Time, DNUsuario string) {
+func bloquearUsuario(fecha time.Time, DNUsuario string) error {
+
+	dnBase := "ou=people,dc=salud,dc=gob,dc=sv"
 	usuario, contrasenia, url := utils.ConfiguracionAccesoLdap()
-	acceso := base.NewAccesoUsuario(url, usuario, contrasenia)
+	conexion, err := utils.Conectar(url, usuario, contrasenia)
+	if err != nil {
+		utils.Salida("Error al conectarse", err)
+	}
+	acceso := base.ObjetoAcceso{Cliente: conexion, Base: dnBase}
 
 	marcaBorrado := fmt.Sprintf("ENCOLABORRADO : %s", fecha.Format(time.RFC822))
 	modificacion := []utils.Reemplazo{
@@ -33,21 +39,29 @@ func bloquearUsuario(fecha time.Time, DNUsuario string) {
 		{Clave: "zimbraAccountStatus", Valor: "closed"},
 	}
 
-	acceso.ModificarUsuario(DNUsuario, modificacion)
-
+	err = acceso.ModificarUsuario(DNUsuario, modificacion)
+	return err
 }
 
 func bloquear() {
-	fecha := time.Now()
 
+	dnBase := "ou=people,dc=salud,dc=gob,dc=sv"
 	usuario, contrasenia, url := utils.ConfiguracionAccesoLdap()
-	acceso := base.NewAccesoUsuario(url, usuario, contrasenia)
-
+	conexion, err := utils.Conectar(url, usuario, contrasenia)
+	if err != nil {
+		utils.Salida("Error al conectarse", err)
+	}
+	acceso := base.ObjetoAcceso{Cliente: conexion, Base: dnBase}
 	filtro := "(&(zimbraLastLogonTimestamp=*)(!(description=ENCOLABORRADO*)))"
-	atributos := []string{"uid"}
-	acceso.ListarUsuarios(filtro, atributos, filtrarInactivos)
+	atributos := []string{"uid", "zimbraLastLogonTimestamp"}
+	acceso.ListarUsuarios(filtro, atributos, filtrarInactivosObjetos)
 
 	for _, usuario := range acceso.Datos {
-		bloquearUsuario(fecha, usuario.DN)
+		fmt.Println(usuario.DN)
+		//fecha := time.Now()
+		//err := bloquearUsuario(fecha, usuario.DN)
+		//if err != nil {
+		//	fmt.Println(usuario.DN)
+		//}
 	}
 }
