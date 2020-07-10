@@ -1,7 +1,7 @@
 package base_test
 
 import (
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/go-ldap/ldap/v3"
@@ -17,7 +17,6 @@ func operacion(entradas *ldap.SearchResult) (resultado []base.Objeto) {
 		nombre := entrada.GetAttributeValue("cn")
 		descripcion := entrada.GetAttributeValue("description")
 		item := base.Objeto{Nombre: nombre, Description: descripcion}
-		fmt.Println(item)
 		resultado = append(resultado, item)
 	}
 	return
@@ -28,6 +27,29 @@ var datosEntrada = []map[string][]string{
 		"cn":          []string{"Alexander Ortíz"},
 		"description": []string{"USERMODWEB"},
 	},
+}
+
+func estaConfigurado(clave string, item map[string][]string) (bool, string) {
+	valor, ok := item[clave]
+	if ok {
+		return ok, valor[0]
+	}
+	return ok, ""
+}
+
+func crearEsperado(datos []map[string][]string) (resultado []base.Objeto) {
+	for _, item := range datos {
+		usuario := base.Objeto{}
+		if ok, valor := estaConfigurado("cn", item); ok {
+			usuario.Nombre = valor
+		}
+		if ok, valor := estaConfigurado("description", item); ok {
+			usuario.Description = valor
+		}
+		resultado = append(resultado, usuario)
+	}
+
+	return
 }
 
 func crearResultado(datos []map[string][]string) *ldap.SearchResult {
@@ -41,6 +63,51 @@ func crearResultado(datos []map[string][]string) *ldap.SearchResult {
 	return resultado
 }
 
+func TestAccesoUsuarioNil(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	conexionMock := mocks.NewMockClient(ctrl)
+	acceso := base.ObjetoAcceso{Cliente: conexionMock, Base: ""}
+
+	peticion := ldap.NewSearchRequest("", ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false, "", []string{}, nil)
+	errorPrueba := errors.New("Error improbable")
+
+	conexionMock.
+		EXPECT().
+		Search(peticion).
+		Return(new(ldap.SearchResult), errorPrueba).
+		Times(1)
+
+	// Empieza el dichoso test
+	err := acceso.ListarUsuarios("", []string{}, operacion)
+	if err == nil {
+		t.Error("Debe saber devolver un error")
+	}
+
+}
+
+func TestModificarUsuario(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	conexionMock := mocks.NewMockClient(ctrl)
+	acceso := base.ObjetoAcceso{Cliente: conexionMock, Base: ""}
+
+	modificacion := ldap.NewModifyRequest("", []ldap.Control{})
+	errorPrueba := errors.New("Otro error improbable")
+
+	conexionMock.
+		EXPECT().
+		Modify(modificacion).
+		Return(errorPrueba).
+		Times(1)
+
+	// Empieza el test propiamente dicho
+	err := acceso.ModificarUsuario("", []base.Reemplazo{})
+	if err == nil {
+		t.Errorf("Debe saber devolver un error")
+	}
+}
+
 func TestAccesoUsuario(t *testing.T) {
 	ctrl := gomock.NewController(t)
 
@@ -48,8 +115,8 @@ func TestAccesoUsuario(t *testing.T) {
 	acceso := base.ObjetoAcceso{Cliente: conexionMock, Base: ""}
 
 	peticion := ldap.NewSearchRequest("", ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false, "", []string{}, nil)
-
 	resultado := crearResultado(datosEntrada)
+
 	conexionMock.
 		EXPECT().
 		Search(peticion).
@@ -57,8 +124,7 @@ func TestAccesoUsuario(t *testing.T) {
 		Times(1)
 
 	// Comienza propiamente el test
-	item := base.Objeto{Nombre: "Alexander Ortíz", Description: "USERMODWEB"}
-	esperado := []base.Objeto{item}
+	esperado := crearEsperado(datosEntrada)
 	acceso.ListarUsuarios("", []string{}, operacion)
 	if !cmp.Equal(acceso.Datos, esperado) {
 		t.Error(cmp.Diff(acceso.Datos, esperado))

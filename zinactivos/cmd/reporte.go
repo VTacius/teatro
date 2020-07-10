@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-ldap/ldap/v3"
 	"github.com/spf13/cobra"
 	"xibalba.com/vtacius/zinactivos/base"
 	"xibalba.com/vtacius/zinactivos/utils"
@@ -18,9 +17,12 @@ import (
 // reporteCmd represents the reporte command
 var reporteCmd = &cobra.Command{
 	Use:   "reporte",
-	Short: "A brief description of your command",
+	Short: "Envia por correo un reporte del trabajo realizado sobre los usuarios bloqueados",
 	Run: func(cmd *cobra.Command, args []string) {
-		reporte()
+		dnBase := "ou=people,dc=salud,dc=gob,dc=sv"
+		usuario, contrasenia, url := utils.ConfiguracionAccesoLdap()
+
+		reporte(dnBase, usuario, contrasenia, url)
 	},
 }
 
@@ -113,24 +115,6 @@ func contenido(subject string, data datos) (string, error) {
 
 }
 
-func crearEntradas(respuesta *ldap.SearchResult) (resultado []base.Objeto) {
-	for _, item := range respuesta.Entries {
-		DN := item.DN
-		ZimbraLastLogonTimestamp := utils.Fechador(item.GetAttributeValue("zimbraLastLogonTimestamp"))
-		Username := strings.TrimSpace(item.GetAttributeValue("uid"))
-		Nombre := strings.TrimSpace(item.GetAttributeValue("cn"))
-		Description := strings.TrimSpace(item.GetAttributeValue("description"))
-		resultado = append(resultado,
-			base.Objeto{DN: DN,
-				Username:                 Username,
-				Nombre:                   Nombre,
-				ZimbraLastLogonTimestamp: ZimbraLastLogonTimestamp,
-				Description:              Description})
-	}
-
-	return
-}
-
 func bloqueadoHoy(hoy time.Time, fecha time.Time) (resultado bool) {
 	// No ha pasado más de un día de segundos
 	return utils.RevisarIntervalo(86400, hoy, fecha) == 0
@@ -158,32 +142,36 @@ func clasificarEntradas(entradas []base.Objeto) (bloqueadosHoy []base.Objeto, pr
 	return
 }
 
-func reporte() {
+func reporte(dnBase string, usuario string, contrasenia string, url string) {
 
-	dnBase := "ou=people,dc=salud,dc=gob,dc=sv"
-	usuario, contrasenia, url := utils.ConfiguracionAccesoLdap()
-	conexion, err := utils.Conectar(url, usuario, contrasenia)
+	conexion, err := base.Conectar(url, usuario, contrasenia)
 	if err != nil {
 		utils.Salida("Error al conectarse", err)
 	}
-	acceso := base.ObjetoAcceso{Cliente: conexion, Base: dnBase}
 
+	acceso := base.ObjetoAcceso{Cliente: conexion, Base: dnBase}
 	filtro := "(&(zimbraLastLogonTimestamp=*)(description=ENCOLABORRADO*))"
 	atributos := []string{"cn", "uid", "zimbraLastLogonTimestamp", "description"}
-	acceso.ListarUsuarios(filtro, atributos, crearEntradas)
+
+	err = acceso.ObtenerUsuarios(filtro, atributos)
+	if err != nil {
+		utils.Salida("Error al ejecutar búsqueda", err)
+	}
+
+	acceso.ListarBusqueda()
 	bloqueados, proximos := clasificarEntradas(acceso.Datos)
 
 	// Si no hay datos que mostrar, pues que no se envia nada
 
 	if len(bloqueados) == 0 && len(proximos) == 0 {
-		fmt.Println("No envia reporte porque no hay nada que enviar")
+		fmt.Println("No envia reporte porque no hay nada que reportar")
 		os.Exit(0)
 	}
 
 	// Empiezo con el envío de correo
 	usuarioCorreo, passwordCorreo, servidorCorreo := utils.ConfiguracionEnvioCorreo()
 	subject := "Subject: Reporte de usuarios inactivos\n"
-	rcpt := "To: <alortiz@salud.gob.sv>\n"
+	rcpt := "To: <alortiz@salud.gob.sv>, <rnajarro@salud.gob.sv>, <ajgonzalez@salud.gob.sv>\n"
 
 	data := datos{Bloqueados: bloqueados, Proximos: proximos}
 
