@@ -1,25 +1,40 @@
 package base
 
 import (
-	"crypto/tls"
-
-	"github.com/go-ldap/ldap/v3"
+	"fmt"
+	"strings"
 )
 
-// Conectar : Inicia la comunicación con el servidor LDAP
-func Conectar(url string, usuario string, contrasenia string) (*ldap.Conn, error) {
-	tlsConfig := &tls.Config{InsecureSkipVerify: true}
-	config := ldap.DialWithTLSConfig(tlsConfig)
-	conexion, err := ldap.DialURL(url, config)
-	if err != nil {
-		return conexion, err
+// Atributo : Valor y metadata por cada atributos
+type Atributo struct {
+	Valor    string
+	Longitud int
+}
+
+// Objeto : Cada item que se obtiene de LDAP
+type Objeto struct {
+	DN        string
+	Atributos map[string]Atributo
+}
+
+// Enumerar : Crea una lista de los valores del item
+func (objeto *Objeto) Enumerar(atributos []string) string {
+	var resultado strings.Builder
+	for _, clave := range atributos {
+		attr := "'" + objeto.Atributos[clave].Valor + "';"
+		resultado.WriteString(attr)
+	}
+	return resultado.String()
+}
+
+// Tabular : Crea una simpática tabla para mostrar
+func (objeto *Objeto) Tabular(atributos []string, longitudes map[string]int) string {
+	var resultado strings.Builder
+	resultado.WriteString("|")
+	for _, clave := range atributos {
+		celda := fmt.Sprintf(" %-*s |", longitudes[clave], objeto.Atributos[clave].Valor)
+		resultado.WriteString(celda)
 	}
 
-	conexion.StartTLS(tlsConfig)
-	err = conexion.Bind(usuario, contrasenia)
-	if err != nil {
-		return conexion, err
-	}
-
-	return conexion, nil
+	return resultado.String()
 }
