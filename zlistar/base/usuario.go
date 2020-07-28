@@ -1,46 +1,12 @@
 package base
 
 import (
-	"encoding/csv"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/go-ldap/ldap/v3"
-	"xibalba.com/vtacius/zlistar/utils"
 )
-
-// Atributo : Valor y metadata por cada atributos
-type Atributo struct {
-	valor    string
-	longitud int
-}
-
-// Objeto : Cada item que se obtiene de LDAP
-type Objeto struct {
-	DN        string
-	Atributos map[string]Atributo
-}
-
-// Enumerar: Crea una lista de los valores del item
-func (objeto *Objeto) Enumerar(atributos []string) (resultado []string) {
-	for _, clave := range atributos {
-		resultado = append(resultado, objeto.Atributos[clave].valor)
-	}
-	return
-}
-
-// Tabular : Crea una simpática tabla para mostrar
-func (objeto *Objeto) Tabular(atributos []string, longitudes map[string]int) string {
-	var resultado strings.Builder
-	resultado.WriteString("|")
-	for _, clave := range atributos {
-		celda := fmt.Sprintf(" %-*s |", longitudes[clave], objeto.Atributos[clave].valor)
-		resultado.WriteString(celda)
-	}
-
-	return resultado.String()
-}
 
 // Acceso : Establece la conexión y operaciones LDAP
 type Acceso struct {
@@ -101,8 +67,8 @@ func obtenerLongitudes(attrs *[]string, datos *[]Objeto) map[string]int {
 
 	for _, item := range *datos {
 		for _, clave := range *attrs {
-			if item.Atributos[clave].longitud > longitudes[clave] {
-				longitudes[clave] = item.Atributos[clave].longitud
+			if item.Atributos[clave].Longitud > longitudes[clave] {
+				longitudes[clave] = item.Atributos[clave].Longitud
 			}
 		}
 	}
@@ -111,11 +77,8 @@ func obtenerLongitudes(attrs *[]string, datos *[]Objeto) map[string]int {
 
 // ParaCSV : Produce una salida en CSV
 func (acceso *Acceso) ParaCSV(salida io.Writer) {
-	escritor := csv.NewWriter(salida)
-	for numeral, item := range acceso.Datos {
-		if err := escritor.Write(item.Enumerar(acceso.attrs)); err != nil {
-			utils.Ruptura(fmt.Sprintf("El item %d no pudo escribirse", numeral), err)
-		}
+	for _, item := range acceso.Datos {
+		fmt.Fprintln(salida, item.Enumerar(acceso.attrs))
 	}
 }
 

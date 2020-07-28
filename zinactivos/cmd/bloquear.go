@@ -82,7 +82,6 @@ func bloquear(ejecutar bool, periodo float64, dnBase string, usuario string, con
 				fmt.Println(err, usuario.DN)
 			}
 		} else {
-
 			fmt.Println(usuario.DN)
 		}
 	}
